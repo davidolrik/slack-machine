@@ -1,27 +1,45 @@
 from apscheduler.schedulers.background import BackgroundScheduler
-from slackclient import SlackClient
+from slack import RTMClient, WebClient
 from machine.settings import import_settings
 from machine.utils import Singleton
 from machine.utils.module_loading import import_string
 from machine.utils.redis import gen_config_dict
 
 
-class Slack(metaclass=Singleton):
+class SlackRTMClient(metaclass=Singleton):
     def __init__(self):
         _settings, _ = import_settings()
         slack_api_token = _settings.get('SLACK_API_TOKEN', None)
         http_proxy = _settings.get('HTTP_PROXY', None)
-        https_proxy = _settings.get('HTTPS_PROXY', None)
-        proxies = {'http': http_proxy, 'https': https_proxy}
 
-        self._client = SlackClient(slack_api_token, proxies=proxies) if slack_api_token else None
+        self._client = RTMClient(
+            token=slack_api_token, proxy=http_proxy
+        ) if slack_api_token else None
 
     def __getattr__(self, item):
         return getattr(self._client, item)
 
     @staticmethod
     def get_instance():
-        return Slack()
+        return SlackRTMClient()
+
+
+class SlackWebClient(metaclass=Singleton):
+    def __init__(self):
+        _settings, _ = import_settings()
+        slack_api_token = _settings.get('SLACK_API_TOKEN', None)
+        http_proxy = _settings.get('HTTP_PROXY', None)
+
+        self._client = WebClient(
+            token=slack_api_token, proxy=http_proxy
+        ) if slack_api_token else None
+
+    def __getattr__(self, item):
+        return getattr(self._client, item)
+
+    @staticmethod
+    def get_instance():
+        return SlackWebClient()
 
 
 class Scheduler(metaclass=Singleton):
