@@ -1,10 +1,10 @@
-from machine.singletons import Slack, Scheduler
+from machine.singletons import SlackRTMClient, SlackWebClient, Scheduler
 
 
 class MessagingClient:
     @property
     def users(self):
-        return Slack.get_instance().server.users
+        return SlackWebClient.get_instance().server.users
 
     @property
     def channels(self):
