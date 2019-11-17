@@ -1,0 +1,3 @@
+- Move to async operation using asyncio
+- Add typings and check with MyPy
+- Upgrade to Python 3.8 (fix locale bug in tox?)
