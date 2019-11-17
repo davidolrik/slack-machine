@@ -1,4 +1,5 @@
 from blinker import signal
+from machine.clients.slack import SlackClient
 
 
 class MachineBasePlugin:
@@ -16,8 +17,7 @@ class MachineBasePlugin:
         specifically for their plugin.
     """
 
-    def __init__(self, settings, client, storage):
-        self._client = client
+    def __init__(self, settings, storage):
         self.storage = storage
         self.settings = settings
         self._fq_name = "{}.{}".format(self.__module__, self.__class__.__name__)
@@ -34,55 +34,55 @@ class MachineBasePlugin:
         """
         pass
 
-    @property
-    def users(self):
-        """Dictionary of all users in the Slack workspace
-
-        :return: a dictionary of all users in the Slack workspace, where the key is the user id and
-            the value is a User object (see the source code of `User`_ in the underlying Slack
-            client library)
-
-        .. _User: https://github.com/slackapi/python-slackclient/blob/master/slackclient/user.py
-        """
-        return self._client.users
-
-    @property
-    def channels(self):
-        """List of all channels in the Slack workspace
-
-        This is a list of all channels in the Slack workspace that the bot is aware of. This
-        includes all public channels, all private channels the bot is a member of and all DM
-        channels the bot is a member of.
-
-        :return: a list of all channels in the Slack workspace, where each channel is a Channel
-            object (see the source code of `Channel`_ in the underlying Slack client library)
-
-        .. _Channel: https://github.com/slackapi/python-slackclient/blob/master/slackclient/channel.py # NOQA
-        """
-        return self._client.channels
-
-    def retrieve_bot_info(self):
-        """Information about the bot user in Slack
-
-        This will return a dictionary with information about the bot user in Slack that represents
-        Slack Machine
-
-        :return: Bot user
-        """
-        return self._client.retrieve_bot_info()
-
-    def at(self, user):
-        """Create a mention of the provided user
-
-        Create a mention of the provided user in the form of ``<@[user_id]>``. This method is
-        convenient when you want to include mentions in your message. This method does not send
-        a message, but should be used together with methods like
-        :py:meth:`~machine.plugins.base.MachineBasePlugin.say`
-
-        :param user: user your want to mention
-        :return: user mention
-        """
-        return self._client.fmt_mention(user)
+    # @property
+    # def users(self):
+    #     """Dictionary of all users in the Slack workspace
+    #
+    #     :return: a dictionary of all users in the Slack workspace, where the key is the user id and
+    #         the value is a User object (see the source code of `User`_ in the underlying Slack
+    #         client library)
+    #
+    #     .. _User: https://github.com/slackapi/python-slackclient/blob/master/slackclient/user.py
+    #     """
+    #     return self._client.users
+    #
+    # @property
+    # def channels(self):
+    #     """List of all channels in the Slack workspace
+    #
+    #     This is a list of all channels in the Slack workspace that the bot is aware of. This
+    #     includes all public channels, all private channels the bot is a member of and all DM
+    #     channels the bot is a member of.
+    #
+    #     :return: a list of all channels in the Slack workspace, where each channel is a Channel
+    #         object (see the source code of `Channel`_ in the underlying Slack client library)
+    #
+    #     .. _Channel: https://github.com/slackapi/python-slackclient/blob/master/slackclient/channel.py # NOQA
+    #     """
+    #     return self._client.channels
+    #
+    # def retrieve_bot_info(self):
+    #     """Information about the bot user in Slack
+    #
+    #     This will return a dictionary with information about the bot user in Slack that represents
+    #     Slack Machine
+    #
+    #     :return: Bot user
+    #     """
+    #     return self._client.retrieve_bot_info()
+    #
+    # def at(self, user):
+    #     """Create a mention of the provided user
+    #
+    #     Create a mention of the provided user in the form of ``<@[user_id]>``. This method is
+    #     convenient when you want to include mentions in your message. This method does not send
+    #     a message, but should be used together with methods like
+    #     :py:meth:`~machine.plugins.base.MachineBasePlugin.say`
+    #
+    #     :param user: user your want to mention
+    #     :return: user mention
+    #     """
+    #     return self._client.fmt_mention(user)
 
     def say(self, channel, text, thread_ts=None):
         """Send a message to a channel
@@ -99,7 +99,7 @@ class MachineBasePlugin:
         :param thread_ts: optional timestamp of thread, to send a message in that thread
         :return: None
         """
-        self._client.send(channel, text, thread_ts)
+        SlackClient.get_instance().send(channel, text, thread_ts=thread_ts)
 
     def say_scheduled(self, when, channel, text):
         """Schedule a message to a channel
@@ -115,7 +115,7 @@ class MachineBasePlugin:
         :param text: message text
         :return: None
         """
-        self._client.send_scheduled(when, channel, text)
+        SlackClient.get_instance().send_scheduled(when, channel, text)
 
     def say_webapi(self, channel, text, attachments=None, thread_ts=None, ephemeral_user=None):
         """Send a message to a channel using the WebAPI
@@ -141,7 +141,8 @@ class MachineBasePlugin:
         .. _chat.postMessage: https://api.slack.com/methods/chat.postMessage
         .. _chat.postEphemeral: https://api.slack.com/methods/chat.postEphemeral
         """
-        return self._client.send_webapi(channel, text, attachments, thread_ts, ephemeral_user)
+        SlackClient.get_instance().send(channel, text=text, attachments=attachments,
+                                        thread_ts=thread_ts, ephemeral_user=ephemeral_user)
 
     def say_webapi_scheduled(self, when, channel, text, attachments, ephemeral_user):
         """Schedule a message to a channel and send it using the WebAPI
@@ -157,7 +158,8 @@ class MachineBasePlugin:
             to a specific user only
         :return: None
         """
-        self._client.send_webapi_scheduled(when, channel, text, attachments, ephemeral_user)
+        SlackClient.get_instance().send_scheduled(when, channel, text=text, attachments=attachments,
+                                                  ephemeral_user=ephemeral_user)
 
     def react(self, channel, ts, emoji):
         """React to a message in a channel
@@ -321,7 +323,7 @@ class Message:
         :param thread_ts: optional timestamp of thread, to send a message in that thread
         :return: None
         """
-        self._client.send(self.channel.id, text, thread_ts)
+        SlackClient.get_instance().send(self._msg_event['channel'], text=text, thread_ts=thread_ts)
 
     def say_scheduled(self, when, text):
         """Schedule a message

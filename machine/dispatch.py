@@ -1,11 +1,10 @@
-import time
-import re
 import logging
+import re
+from typing import Callable
 
-from machine.singletons import Slack
-from machine.utils.pool import ThreadPool
+from machine.clients.slack import SlackClient
 from machine.plugins.base import Message
-from machine.slack import MessagingClient
+from machine.utils.pool import ThreadPool
 
 logger = logging.getLogger(__name__)
 
@@ -13,7 +12,7 @@ logger = logging.getLogger(__name__)
 class EventDispatcher:
 
     def __init__(self, plugin_actions, settings=None):
-        self._client = Slack()
+        self._client = SlackClient()
         self._plugin_actions = plugin_actions
         self._pool = ThreadPool()
         alias_regex = ''
@@ -28,45 +27,41 @@ class EventDispatcher:
             re.DOTALL,
         )
 
-    def start(self):
-        while True:
-            for event in self._client.rtm_read():
-                self._pool.add_task(self.handle_event, event)
-            time.sleep(.1)
+    def register_event_callback(self, event_type: str, fn: Callable):
+        self._client.register_rtm_callback(event_type, fn)
 
-    def handle_event(self, event):
-        # Gotta catch 'em all!
-        for action in self._plugin_actions['catch_all'].values():
-            action['function'](event)
-        # Basic dispatch based on event type
-        if 'type' in event:
-            if event['type'] in self._plugin_actions['process']:
-                for action in self._plugin_actions['process'][event['type']].values():
-                    action['function'](event)
+    def start(self):
+        self.register_event_callback('pong', self.pong)
+        self.register_event_callback('message', self.handle_message)
+        self._client.start()
+
+    def pong(self, event, **kwargs):
+        logger.debug("Server Pong!")
+
+    def handle_message(self, **payload):
+        logger.debug(payload)
         # Handle message listeners
-        if 'type' in event and event['type'] == 'message':
-            respond_to_msg = self._check_bot_mention(event)
-            if respond_to_msg:
-                listeners = self._find_listeners('respond_to')
-                self._dispatch_listeners(listeners, respond_to_msg)
-            else:
-                listeners = self._find_listeners('listen_to')
-                self._dispatch_listeners(listeners, event)
-        if 'type' in event and event['type'] == 'pong':
-            logger.debug("Server Pong!")
+        event = payload['data']
+        respond_to_msg = self._check_bot_mention(event)
+        if respond_to_msg:
+            listeners = self._find_listeners('respond_to')
+            self._dispatch_listeners(listeners, respond_to_msg)
+        else:
+            listeners = self._find_listeners('listen_to')
+            self._dispatch_listeners(listeners, event)
 
     def _find_listeners(self, type):
         return [action for action in self._plugin_actions[type].values()]
 
     @staticmethod
     def _gen_message(event, plugin_class_name):
-        return Message(MessagingClient(), event, plugin_class_name)
+        return Message(SlackClient(), event, plugin_class_name)
 
     def _get_bot_id(self):
-        return self._client.server.login_data['self']['id']
+        return self._client.bot_info['id']
 
     def _get_bot_name(self):
-        return self._client.server.login_data['self']['name']
+        return self._client.bot_info['name']
 
     def _check_bot_mention(self, event):
         full_text = event.get('text', '')
