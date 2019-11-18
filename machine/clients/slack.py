@@ -6,6 +6,8 @@ from slack import RTMClient, WebClient
 from machine.clients.scheduling import Scheduler
 from machine.settings import import_settings
 from machine.utils import Singleton
+from machine.models.user import User
+from dacite import from_dict
 
 logger = logging.getLogger(__name__)
 
@@ -18,6 +20,7 @@ class SlackClient(metaclass=Singleton):
         self._rtm_client = RTMClient(token=slack_api_token, proxy=http_proxy)
         self._web_client = WebClient(token=slack_api_token, proxy=http_proxy)
         self._bot_info = {}
+        self._users = []
 
     @staticmethod
     def get_instance():
@@ -32,6 +35,16 @@ class SlackClient(metaclass=Singleton):
 
     def _on_open(self, **payload):
         self._bot_info = payload['data']['self']
+        users_resp = self._web_client.users_list(limit=500)
+        self._users = []
+        self._users.extend([from_dict(data_class=User, data=u) for u in users_resp['members']])
+        next_cursor = users_resp['response_metadata']['next_cursor']
+        if next_cursor:
+            while next_cursor:
+                users_resp = self._web_client.users_list(limit=500, cursor=next_cursor)
+                self._users.extend([from_dict(data_class=User, data=u) for u in users_resp['members']])
+                next_cursor = users_resp['response_metadata']['next_cursor']
+        logger.debug("Number of users found: %s" % len(self._users))
 
     @property
     def bot_info(self):
@@ -59,14 +72,15 @@ class SlackClient(metaclass=Singleton):
 
     def send(self, channel, **kwargs):
         if 'ephemeral_user' in kwargs:
-            return self._web_client.chat_postEphemeral(channel=channel, user=kwargs['ephemeral_user'], **kwargs)
+            return self._web_client.chat_postEphemeral(channel=channel,
+                                                       user=kwargs['ephemeral_user'], **kwargs)
         else:
             return self._web_client.chat_postMessage(channel=channel, **kwargs)
 
     def send_scheduled(self, when, channel, **kwargs):
         args = [self, channel]
 
-        Scheduler.get_instance().add_job(SlackClient.send_webapi, trigger='date', args=args,
+        Scheduler.get_instance().add_job(SlackClient.send, trigger='date', args=args,
                                          kwargs=kwargs, run_date=when)
 
     def react(self, channel, ts, emoji):
