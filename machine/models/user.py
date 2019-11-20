@@ -1,9 +1,10 @@
 from dataclasses import dataclass
 from typing import Optional, Dict
+
 from dacite import from_dict
 
 
-@dataclass
+@dataclass(frozen=True)
 class Profile:
     avatar_hash: str
     status_text: str
@@ -24,7 +25,7 @@ class Profile:
     team: str
 
 
-@dataclass
+@dataclass(frozen=True)
 class User:
     id: str
     team_id: str
@@ -52,15 +53,5 @@ class User:
     def from_api_response(user_reponse: Dict) -> 'User':
         return from_dict(data_class=User, data=user_reponse)
 
-
-class UserSearchDict(dict):
-    def find(self, search_string: str) -> Optional[User]:
-        # Find the user by ID
-        user = self.get(search_string)
-        if user:
-            return user
-        else:
-            # If the user can't be found by ID, try searching by name
-            for id, user in self.items():
-                if str(user.name) == search_string:
-                    return user
+    def fmt_mention(self):
+        return "<@{}>".format(self.id)

@@ -2,6 +2,8 @@ import inspect
 import logging
 import sys
 import time
+from functools import partial
+from typing import Callable, Dict
 from threading import Thread
 
 import dill
@@ -21,6 +23,12 @@ from machine.utils.module_loading import import_string
 from machine.utils.text import show_valid, show_invalid, warn, error, announce
 
 logger = logging.getLogger(__name__)
+
+
+def callable_with_sanitized_event(fn: Callable):
+    def sanitzed_call(**payload):
+        return fn(payload['data'])
+    return sanitzed_call
 
 
 class Machine:
@@ -128,7 +136,7 @@ class Machine:
         for action, config in metadata['plugin_actions'].items():
             if action == 'process':
                 event_type = config['event_type']
-                RTMClient.on(event=event_type, callback=fn)
+                RTMClient.on(event=event_type, callback=callable_with_sanitized_event(fn))
             if action == 'respond_to' or action == 'listen_to':
                 for regex in config['regex']:
                     event_handler = {

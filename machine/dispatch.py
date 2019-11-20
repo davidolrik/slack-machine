@@ -54,7 +54,7 @@ class EventDispatcher:
 
     @staticmethod
     def _gen_message(event, plugin_class_name):
-        return Message(SlackClient(), event, plugin_class_name)
+        return Message(event, plugin_class_name)
 
     def _get_bot_id(self):
         return self._client.bot_info['id']

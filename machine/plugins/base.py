@@ -1,5 +1,6 @@
 from blinker import signal
 from machine.clients.slack import SlackClient
+from machine.models.user import User
 
 
 class MachineBasePlugin:
@@ -61,15 +62,16 @@ class MachineBasePlugin:
     #     """
     #     return self._client.channels
     #
-    # def retrieve_bot_info(self):
-    #     """Information about the bot user in Slack
-    #
-    #     This will return a dictionary with information about the bot user in Slack that represents
-    #     Slack Machine
-    #
-    #     :return: Bot user
-    #     """
-    #     return self._client.retrieve_bot_info()
+    @property
+    def bot_info(self):
+        """Information about the bot user in Slack
+
+        This will return a dictionary with information about the bot user in Slack that represents
+        Slack Machine
+
+        :return: Bot user
+        """
+        return SlackClient.get_instance().bot_info
     #
     # def at(self, user):
     #     """Create a mention of the provided user
@@ -175,7 +177,7 @@ class MachineBasePlugin:
 
         .. _reactions.add: https://api.slack.com/methods/reactions.add
         """
-        return self._client.react(channel, ts, emoji)
+        return SlackClient.get_instance().react(channel, ts, emoji)
 
     def send_dm(self, user, text):
         """Send a Direct Message
@@ -265,18 +267,18 @@ class Message:
     right channel, replying to the sender, etc.
     """
 
-    def __init__(self, client, msg_event, plugin_class_name):
-        self._client = client
+    def __init__(self, msg_event, plugin_class_name):
+        self._client = SlackClient.get_instance()
         self._msg_event = msg_event
         self._fq_plugin_name = plugin_class_name
 
     @property
-    def sender(self):
+    def sender(self) -> User:
         """The sender of the message
 
         :return: the User the message was sent by
         """
-        return self._client.users.find(self._msg_event['user'])
+        return self._client.users[self._msg_event['user']]
 
     @property
     def channel(self):
@@ -284,12 +286,12 @@ class Message:
 
         :return: the Channel the message was sent to
         """
-        return self._client.channels.find(self._msg_event['channel'])
+        return self._client.channels[self._msg_event['channel']]
 
     @property
     def is_dm(self):
-        chan = self._msg_event['channel']
-        return not (chan.startswith('C') or chan.startswith('G'))
+        channel_id = self._msg_event['channel']
+        return not (channel_id.startswith('C') or channel_id.startswith('G'))
 
     @property
     def text(self):
@@ -308,7 +310,7 @@ class Message:
 
         .. _mention: https://api.slack.com/docs/message-formatting#linking_to_channels_and_users
         """
-        return self._client.fmt_mention(self.sender)
+        return self.sender.fmt_mention()
 
     def say(self, text, thread_ts=None):
         """Send a new message to the channel the original message was received in
@@ -323,7 +325,7 @@ class Message:
         :param thread_ts: optional timestamp of thread, to send a message in that thread
         :return: None
         """
-        SlackClient.get_instance().send(self._msg_event['channel'], text=text, thread_ts=thread_ts)
+        self._client.send(self._msg_event['channel'], text=text, thread_ts=thread_ts)
 
     def say_scheduled(self, when, text):
         """Schedule a message
@@ -364,12 +366,12 @@ class Message:
         else:
             ephemeral_user = None
 
-        return self._client.send_webapi(
+        return self._client.send(
             self.channel.id,
-            text,
-            attachments,
-            thread_ts,
-            ephemeral_user,
+            text=text,
+            attachments=attachments,
+            thread_ts=thread_ts,
+            ephemeral_user=ephemeral_user,
         )
 
     def say_webapi_scheduled(self, when, text, attachments=None, ephemeral=False):
@@ -534,7 +536,7 @@ class Message:
 
     def _create_reply(self, text):
         if not self.is_dm:
-            return "{}: {}".format(self.at_sender, text)
+            return f"{self.at_sender}: {text}"
         else:
             return text
 
@@ -551,16 +553,16 @@ class Message:
 
         return thread_ts
 
-    # def __str__(self):
-    #     return "Message '{}', sent by user @{} in channel #{}".format(
-    #         self.text,
-    #         self.sender.name,
-    #         self.channel.name
-    #     )
-    #
-    # def __repr__(self):
-    #     return "Message(text={}, sender={}, channel={})".format(
-    #         repr(self.text),
-    #         repr(self.sender.name),
-    #         repr(self.channel.name)
-    #     )
+    def __str__(self):
+        return "Message '{}', sent by user @{} in channel #{}".format(
+            self.text,
+            self.sender.profile.real_name,
+            self.channel.name
+        )
+
+    def __repr__(self):
+        return "Message(text={}, sender={}, channel={})".format(
+            repr(self.text),
+            repr(self.sender.profile.real_name),
+            repr(self.channel.name)
+        )
