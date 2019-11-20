@@ -1,5 +1,6 @@
 from dataclasses import dataclass
-from typing import Optional
+from typing import Optional, Dict
+from dacite import from_dict
 
 
 @dataclass
@@ -46,3 +47,20 @@ class User:
     is_app_user: bool
     has_2fa: Optional[bool]
     locale: Optional[str]
+
+    @staticmethod
+    def from_api_response(user_reponse: Dict) -> 'User':
+        return from_dict(data_class=User, data=user_reponse)
+
+
+class UserSearchDict(dict):
+    def find(self, search_string: str) -> Optional[User]:
+        # Find the user by ID
+        user = self.get(search_string)
+        if user:
+            return user
+        else:
+            # If the user can't be found by ID, try searching by name
+            for id, user in self.items():
+                if str(user.name) == search_string:
+                    return user

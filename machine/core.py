@@ -6,6 +6,8 @@ from threading import Thread
 
 import dill
 from clint.textui import puts, indent, colored
+from slack import RTMClient
+
 from machine.vendor import bottle
 
 from machine.dispatch import EventDispatcher
@@ -126,7 +128,7 @@ class Machine:
         for action, config in metadata['plugin_actions'].items():
             if action == 'process':
                 event_type = config['event_type']
-                self._dispatcher.register_event_callback(event_type, fn)
+                RTMClient.on(event=event_type, callback=fn)
             if action == 'respond_to' or action == 'listen_to':
                 for regex in config['regex']:
                     event_handler = {

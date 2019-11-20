@@ -1,15 +1,28 @@
 import logging
-from typing import Callable
+from typing import Callable, Dict, List
 
 from slack import RTMClient, WebClient
 
 from machine.clients.scheduling import Scheduler
 from machine.settings import import_settings
 from machine.utils import Singleton
-from machine.models.user import User
+from machine.models.user import User, UserSearchDict
 from dacite import from_dict
 
 logger = logging.getLogger(__name__)
+
+
+def call_paginated_endpoint(endpoint: Callable, field: str, **kwargs) -> List:
+    collection = []
+    response = endpoint(limit=500, **kwargs)
+    collection.extend(response[field])
+    next_cursor = response['response_metadata']['next_cursor']
+    if next_cursor:
+        while next_cursor:
+            response = endpoint(limit=500, cursor=next_cursor, **kwargs)
+            collection.extend(response[field])
+            next_cursor = response['response_metadata']['next_cursor']
+    return collection
 
 
 class SlackClient(metaclass=Singleton):
@@ -20,38 +33,42 @@ class SlackClient(metaclass=Singleton):
         self._rtm_client = RTMClient(token=slack_api_token, proxy=http_proxy)
         self._web_client = WebClient(token=slack_api_token, proxy=http_proxy)
         self._bot_info = {}
-        self._users = []
+        self._users = UserSearchDict()
 
     @staticmethod
-    def get_instance():
+    def get_instance() -> 'SlackClient':
         return SlackClient()
 
-    @staticmethod
-    def register_rtm_callback(event: str, callback: Callable):
-        RTMClient.on(event=event, callback=callback)
+    def _register_user(self, user_response):
+        user = User.from_api_response(user_response)
+        self._users[user.id] = user
+        return user
 
     def ping(self):
         self._rtm_client.ping()
 
     def _on_open(self, **payload):
         self._bot_info = payload['data']['self']
-        users_resp = self._web_client.users_list(limit=500)
-        self._users = []
-        self._users.extend([from_dict(data_class=User, data=u) for u in users_resp['members']])
-        next_cursor = users_resp['response_metadata']['next_cursor']
-        if next_cursor:
-            while next_cursor:
-                users_resp = self._web_client.users_list(limit=500, cursor=next_cursor)
-                self._users.extend([from_dict(data_class=User, data=u) for u in users_resp['members']])
-                next_cursor = users_resp['response_metadata']['next_cursor']
+        all_users = call_paginated_endpoint(self._web_client.users_list, 'members')
+        for u in all_users:
+            self._register_user(u)
         logger.debug("Number of users found: %s" % len(self._users))
+        logger.debug("Users: %s" % [f"{u.profile.display_name}|{u.profile.real_name}"
+                                    for u in self._users.values()])
+
+    def _on_team_join(self, **payload):
+        user = self._register_user(payload['data']['user'])
+        logger.debug("User joined team: %s" % user)
+        logger.debug("Users: %s" % [f"{u.profile.display_name}|{u.profile.real_name}"
+                                    for u in self._users.values()])
 
     @property
     def bot_info(self):
         return self._bot_info
 
     def start(self):
-        self.register_rtm_callback('open', self._on_open)
+        RTMClient.on(event='open', callback=self._on_open)
+        RTMClient.on(event='team_join', callback=self._on_team_join)
         self._rtm_client.start()
 
     # @property

@@ -1,6 +1,7 @@
 import logging
 import re
-from typing import Callable
+
+from slack import RTMClient
 
 from machine.clients.slack import SlackClient
 from machine.plugins.base import Message
@@ -27,12 +28,9 @@ class EventDispatcher:
             re.DOTALL,
         )
 
-    def register_event_callback(self, event_type: str, fn: Callable):
-        self._client.register_rtm_callback(event_type, fn)
-
     def start(self):
-        self.register_event_callback('pong', self.pong)
-        self.register_event_callback('message', self.handle_message)
+        RTMClient.on(event='pong', callback=self.pong)
+        RTMClient.on(event='message', callback=self.handle_message)
         self._client.start()
 
     def pong(self, event, **kwargs):
@@ -42,13 +40,14 @@ class EventDispatcher:
         logger.debug(payload)
         # Handle message listeners
         event = payload['data']
-        respond_to_msg = self._check_bot_mention(event)
-        if respond_to_msg:
-            listeners = self._find_listeners('respond_to')
-            self._dispatch_listeners(listeners, respond_to_msg)
-        else:
-            listeners = self._find_listeners('listen_to')
-            self._dispatch_listeners(listeners, event)
+        if 'user' in event and not event['user'] == self._get_bot_id():
+            respond_to_msg = self._check_bot_mention(event)
+            if respond_to_msg:
+                listeners = self._find_listeners('respond_to')
+                self._dispatch_listeners(listeners, respond_to_msg)
+            else:
+                listeners = self._find_listeners('listen_to')
+                self._dispatch_listeners(listeners, event)
 
     def _find_listeners(self, type):
         return [action for action in self._plugin_actions[type].values()]

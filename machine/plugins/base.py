@@ -551,16 +551,16 @@ class Message:
 
         return thread_ts
 
-    def __str__(self):
-        return "Message '{}', sent by user @{} in channel #{}".format(
-            self.text,
-            self.sender.name,
-            self.channel.name
-        )
-
-    def __repr__(self):
-        return "Message(text={}, sender={}, channel={})".format(
-            repr(self.text),
-            repr(self.sender.name),
-            repr(self.channel.name)
-        )
+    # def __str__(self):
+    #     return "Message '{}', sent by user @{} in channel #{}".format(
+    #         self.text,
+    #         self.sender.name,
+    #         self.channel.name
+    #     )
+    #
+    # def __repr__(self):
+    #     return "Message(text={}, sender={}, channel={})".format(
+    #         repr(self.text),
+    #         repr(self.sender.name),
+    #         repr(self.channel.name)
+    #     )
