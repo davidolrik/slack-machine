@@ -3,6 +3,7 @@ import re
 
 from slack import RTMClient
 
+from machine.clients.singletons.slack import LowLevelSlackClient
 from machine.clients.slack import SlackClient
 from machine.plugins.base import Message
 from machine.utils.pool import ThreadPool
@@ -13,7 +14,7 @@ logger = logging.getLogger(__name__)
 class EventDispatcher:
 
     def __init__(self, plugin_actions, settings=None):
-        self._client = SlackClient()
+        self._client = LowLevelSlackClient()
         self._plugin_actions = plugin_actions
         self._pool = ThreadPool()
         alias_regex = ''
@@ -54,7 +55,7 @@ class EventDispatcher:
 
     @staticmethod
     def _gen_message(event, plugin_class_name):
-        return Message(event, plugin_class_name)
+        return Message(SlackClient(), event, plugin_class_name)
 
     def _get_bot_id(self):
         return self._client.bot_info['id']

@@ -1,6 +1,6 @@
 import dill
 
-from machine.clients.storage import Storage
+from machine.clients.singletons.storage import Storage
 from machine.utils import sizeof_fmt
 
 
